@@ -8,9 +8,15 @@ echo "Pull complete"
 
 CONTAINER_NAME='sales-backend'
 CID=$(docker ps -q -f status=running -f name=^/${CONTAINER_NAME}$)
+EXIT=$(docker ps -q -f status=exited -f name=^/${CONTAINER_NAME}$)
 if [ "${CID}" ]; then
   echo "Container exists"
   docker stop sales-backend
+  docker rm sales-backend
+fi
+
+if [ "${EXIT}" ]; then
+  echo "Container exists"
   docker rm sales-backend
 fi
 
