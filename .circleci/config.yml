@@ -1,0 +1,135 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: 'cimg/node:16.10.0'
+      - image: 'docker:17.09.1-ce-git'
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - setup_remote_docker
+      - restore_cache:
+          keys:
+            - v1-dependencies-{ { checksum "package.json"  } }
+            - v1-dependencies-
+
+      - run: npm install
+      
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{ { checksum "package.json" } }  
+      
+      - run:
+          name: Build Success
+          when: on_success
+          command: >
+            sudo apt-get update          
+
+            sudo apt install python3-pip
+
+            sudo apt-get install -y awscli
+
+            sudo aws --version
+
+            docker login -u AWS -p $(aws ecr get-login-password --region $AWS_REGION) $AWS_ECR_ACCOUNT_URL
+
+            docker build -t sales-node .
+
+            docker tag sales-node:latest $AWS_ECR_ACCOUNT_URL/sales-node:latest
+
+            docker push $AWS_ECR_ACCOUNT_URL/sales-node:latest
+  
+  deploy:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    working_directory: ~/repo  
+    steps:
+      - checkout
+      - run:
+          name: Deploy
+          when: on_success
+          command:  |
+
+            sudo apt-get update
+
+            sudo apt install python3-pip
+             
+            sudo apt-get install -y awscli 
+
+            sudo aws --version 
+
+            # curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" 
+            
+            # unzip awscli-bundle.zip 
+            
+            # ./awscli-bundle/install -b ~/bin/aws
+            
+            # 2- Get the public IP of the current CircleCI runner
+            PUBLIC_IP=$(curl ipinfo.io/ip)
+
+            echo PUBLIC_IP
+            
+            # 3- Get AWS Region
+            AWS_REGION=ap-south-1
+
+            # 4- Get SG ID
+            SG_ID=sg-063df30c3645fd454
+            
+            # 5- Add an ingress rule to the security group
+            # aws ec2 authorize-security-group-ingress --region ap-south-1 --group-id $SG_ID --protocol tcp --port 22 --cidr $PUBLIC_IP/32
+            
+            # 6- Give the ingress rule some time to propogate
+            # sleep 5
+
+            # 7- SSH to the server to deploy
+            # TODO Change to your username
+            EC2_USERNAME=ec2-user
+            # TODO Change to your server's URL or public IP
+            EC2_PUBLIC_DNS=ec2-3-108-66-178.ap-south-1.compute.amazonaws.com
+            
+            # chmod +x .circleci/deploy.sh
+            
+            # sudo scp -o StrictHostKeyChecking=no -v -r .circleci/deploy.sh ec2-user@ec2-3-108-66-178.ap-south-1.compute.amazonaws.com:/home/ec2-user
+
+            ssh -o StrictHostKeyChecking=no ec2-user@ec2-3-108-66-178.ap-south-1.compute.amazonaws.com \
+            bash /home/ec2-user/deploy-node/deploy.sh
+
+            
+             
+            
+     
+      # - run:
+      #     name: 'Stopping Containers'
+      #     command: >
+
+      #       ssh -o StrictHostKeyChecking=no ec2-user@ec2-3-108-66-178.ap-south-1.compute.amazonaws.com  &
+
+      #       docker stop $AWS_ECR_ACCOUNT_URL/temp & exit        
+            
+      # - run:
+      #     name: 'Removing Containers'
+      #     command: >
+
+      #       ssh -o StrictHostKeyChecking=no ec2-user@ec2-3-108-66-178.ap-south-1.compute.amazonaws.com  &
+
+      #       docker rm $AWS_ECR_ACCOUNT_URL/temp & exit     
+             
+      # - run:
+      #     name: 'Run Containers'
+      #     command: >
+
+      #       ssh -o StrictHostKeyChecking=no ec2-user@ec2-3-108-66-178.ap-south-1.compute.amazonaws.com  &
+
+      #       docker run -p 80:3000 -d $AWS_ECR_ACCOUNT_URL/temp & exit
+
+ 
+          
+workflows:
+  version: 2
+  execute_bulk:
+    jobs:
+      - deploy
+      # - deploy:
+      #     requires:
+      #       - build 
